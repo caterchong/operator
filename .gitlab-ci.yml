@@ -1,0 +1,152 @@
+include:
+  - project: system/cicd/gitlab-ci-common
+    ref: v0.3.4
+    file:
+      - pipeline/standard.gitlab-ci.yml
+      - credentials/main.gitlab-ci.yml
+  - project: devops/cicd/gitlab-ci-common-utils
+    ref: v0.3.0
+    file:
+      - main.gitlab-ci.yml
+
+stages:
+  - docker:build
+  - git:tag
+  - docker:push
+  - pipeline:cleanup
+
+##################################################
+# docker:build
+##################################################
+
+docker_build:
+  stage: docker:build
+  extends:
+    - .docker_my_kl_01_harbor_credential
+    - .team_account_credential
+  before_script:
+    - !reference [.docker_init, script]
+    - !reference [.docker_save, script]
+    - !reference [.docker_get_latest_tag_from_cr, script]
+  script:
+    - set -x
+    - docker_init
+    - cache_image=$(docker_get_latest_tag_from_cr "$CR_MY_KL_01_HARBOR_ENDPOINT" "$TEAM_ACCOUNT_LDAP_USERNAME" "$TEAM_ACCOUNT_LDAP_PASSWORD" "$IMAGE_NAME")
+    - |
+      if [ "$cache_image" != "" ]
+      then
+        extra_arg="--cache-from=$CR_MY_KL_01_HARBOR_ENDPOINT/$IMAGE_NAME:$cache_image"
+        docker login --username "$TEAM_ACCOUNT_LDAP_USERNAME" --password "$TEAM_ACCOUNT_LDAP_PASSWORD" "$CR_MY_KL_01_HARBOR_ENDPOINT"
+        docker pull $CR_MY_KL_01_HARBOR_ENDPOINT/$IMAGE_NAME:$cache_image
+      fi
+    - image_built="$(make "$MAKE_TARGET" EXTRA_ARG="${extra_arg-}" | tail -n 1)"
+    - docker_save "$image_built" "$IMAGE_NAME"
+  variables:
+    IMAGE_NAME: vm-toolkit
+    MAKE_TARGET: docker-build
+
+##################################################
+# git:tag
+##################################################
+
+git_tag:
+  stage: git:tag
+  extends:
+    - .gitlab_credential
+  before_script:
+    - !reference [.git_version, script]
+    - !reference [.gitlab_create_tag, script]
+  script:
+    - gitlab_create_tag "$GITLAB_TOKEN" "$(git_version)"
+
+##################################################
+# docker:push
+##################################################
+
+.docker_push:
+  stage: docker:push
+  before_script:
+    - !reference [.git_version, script]
+    - !reference [.docker_init, script]
+    - !reference [.docker_load, script]
+    - !reference [.docker_get_image_name, script]
+  script:
+    - set -x
+    - docker_init
+    - |
+      set -euo pipefail
+
+      docker login --username "$CR_USERNAME" --password "$CR_PASSWORD" "$CR_ENDPOINT"
+      image_version="$(git_version)"
+      image_url="$(docker_load vm-toolkit)"
+      image_base_name="$(docker_get_image_name $image_url)"
+      docker tag "$image_url" "$CR_ENDPOINT/$image_base_name:$image_version"
+      docker push "$CR_ENDPOINT/$image_base_name:$image_version"
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
+
+01_my_kl_01_docker_push:
+  extends:
+    - .docker_my_kl_01_harbor_credential
+    - .team_account_credential
+    - .docker_push
+  variables:
+    CR_ENDPOINT: $CR_MY_KL_01_HARBOR_ENDPOINT
+    CR_USERNAME: $TEAM_ACCOUNT_LDAP_USERNAME
+    CR_PASSWORD: $TEAM_ACCOUNT_LDAP_PASSWORD
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
+    # For development
+    - if: $CI_COMMIT_BRANCH && $CI_PIPELINE_SOURCE == 'web'
+
+02_ali_staging_docker_push:
+  extends:
+    - .docker_ali_staging_credential
+    - .docker_push
+  variables:
+    CR_ENDPOINT: $CR_ALI_STAGING_ENDPOINT
+    CR_USERNAME: $CR_ALI_STAGING_USERNAME
+    CR_PASSWORD: $CR_ALI_STAGING_PASSWORD
+
+03_ali_prod_docker_push:
+  extends:
+    - .docker_ali_prod_credential
+    - .docker_push
+  variables:
+    CR_ENDPOINT: $CR_ALI_PROD_ENDPOINT
+    CR_USERNAME: $CR_ALI_PROD_USERNAME
+    CR_PASSWORD: $CR_ALI_PROD_PASSWORD
+
+04_sige-dev-internal-ali-cn-hk-d_docker_push:
+  extends:
+    - .docker_ali_dev_credential
+    - .docker_push
+  variables:
+    CR_ENDPOINT: vault:system/data/common/container-registry/alicloud/dev#SYSTEM_PUBLIC_ENDPOINT
+    CR_USERNAME: $CR_ALI_DEV_USERNAME
+    CR_PASSWORD: $CR_ALI_DEV_PASSWORD
+
+
+##################################################
+# pipeline:cleanup
+##################################################
+
+docker_cleanup:
+  stage: pipeline:cleanup
+  before_script:
+    - !reference [.docker_cleanup, script]
+  script:
+    - docker_cleanup
+
+pipeline_cleanup:
+  stage: pipeline:cleanup
+  extends: .gitlab_credential
+  before_script:
+    - !reference [.gitlab_cleanup_pipelines, script]
+  script:
+    - gitlab_cleanup_pipelines "$GITLAB_TOKEN"
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG

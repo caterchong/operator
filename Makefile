@@ -164,7 +164,7 @@ docker-build: ## Build docker image with the manager.
 		--build-arg BUILDINFO=$(BUILDINFO) \
 		${DOCKER_BUILD_ARGS} \
 		-t $(REGISTRY)/$(ORG)/$(REPO):$(TAG) .
-
+	echo $(REGISTRY)/$(ORG)/$(REPO):$(TAG)
 build-operator: ROOT=./cmd
 build-operator: build
 
