@@ -364,6 +364,9 @@ func addVMClusterDefaults(objI interface{}) {
 		if cr.Spec.VMStorage.Image.PullPolicy == "" {
 			cr.Spec.VMStorage.Image.PullPolicy = corev1.PullIfNotPresent
 		}
+		if cr.Spec.VMStorage.MountPath == "" {
+			cr.Spec.VMStorage.MountPath = vmStorageDefaultDBPath
+		}
 		if cr.Spec.VMStorage.StorageDataPath == "" {
 			cr.Spec.VMStorage.StorageDataPath = vmStorageDefaultDBPath
 		}

@@ -338,6 +338,9 @@ type VMStorage struct {
 	// +optional
 	// +kubebuilder:validation:Enum=INFO;WARN;ERROR;FATAL;PANIC
 	LogLevel string `json:"logLevel,omitempty"`
+	// MountPath - path to volumn, must be prefix for storageDataPath
+	// +optional
+	MountPath string `json:"mountPath,omitempty"`
 	// StorageDataPath - path to storage data
 	// +optional
 	StorageDataPath string `json:"storageDataPath,omitempty"`

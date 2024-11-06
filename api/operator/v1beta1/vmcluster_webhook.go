@@ -18,6 +18,7 @@ package v1beta1
 
 import (
 	"fmt"
+	"strings"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -60,6 +61,12 @@ func (r *VMCluster) sanityCheck() error {
 			}
 		}
 	}
+	if r.Spec.VMStorage != nil {
+		if !strings.HasPrefix(r.Spec.VMStorage.StorageDataPath, r.Spec.VMStorage.MountPath) {
+			return fmt.Errorf("MountPath must be prefix of StorageDataPath")
+		}
+	}
+
 	if r.Spec.VMStorage != nil && r.Spec.VMStorage.VMBackup != nil {
 		if err := r.Spec.VMStorage.VMBackup.sanityCheck(r.Spec.License); err != nil {
 			return err
