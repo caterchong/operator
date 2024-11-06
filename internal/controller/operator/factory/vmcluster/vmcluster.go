@@ -992,7 +992,7 @@ func makePodSpecForVMStorage(ctx context.Context, cr *vmv1beta1.VMCluster) (*cor
 
 	vmMounts = append(vmMounts, corev1.VolumeMount{
 		Name:      cr.Spec.VMStorage.GetStorageVolumeName(),
-		MountPath: cr.Spec.VMStorage.StorageDataPath,
+		MountPath: cr.Spec.VMStorage.MountPath,
 	})
 	args = append(args, fmt.Sprintf("-storageDataPath=%s", cr.Spec.VMStorage.StorageDataPath))
 
